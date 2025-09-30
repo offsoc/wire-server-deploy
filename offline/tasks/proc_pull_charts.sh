@@ -3,7 +3,7 @@ set -euo pipefail
 
 OUTPUT_DIR=""
 # Default exclude lists
-HELM_CHART_EXCLUDE_LIST="inbucket,wire-server-enterprise"
+HELM_CHART_EXCLUDE_LIST="inbucket,wire-server-enterprise,demo-smtp"
 
 # Parse the arguments
 for arg in "$@"
@@ -83,5 +83,5 @@ pull_charts() {
   echo "Pulling charts done."
 }
 
-wire_build="https://raw.githubusercontent.com/wireapp/wire-builds/b5f3c33783ef219bcd213017eb2cc6b49890c51e/build.json"
+wire_build="https://raw.githubusercontent.com/wireapp/wire-builds/91dc716636442af4131c37719d825ac08d36232a/build.json"
 wire_build_chart_release "$wire_build" | pull_charts

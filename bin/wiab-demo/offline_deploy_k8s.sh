@@ -17,8 +17,6 @@ COTURN_NODE="K8S_COTURN_NODE"
 # keeping it empty to be replaced
 HOST_IP="WIRE_IP"
 
-CHART_URL="https://charts.jetstack.io/charts/cert-manager-v1.13.2.tgz"
-
 # it creates the values.yaml from prod-values.example.yaml and secrets.yaml from prod-secrets.example.yaml, it works on the directory $BASE_DIR"/values/ in the bundle
 process_charts() {  
   
@@ -167,19 +165,15 @@ deploy_charts() {
     eval "$helm_command"
   done
 
-  # display running pods post deploying all helm charts
-  kubectl get pods --sort-by=.metadata.creationTimestamp -n cert-manager-ns
+  # display running pods post deploying all helm charts in default namespace
+  kubectl get pods --sort-by=.metadata.creationTimestamp
 }
 
 deploy_cert_manager() {
-  # downloading the chart if not present
-  if [[ ! -d "$BASE_DIR/charts/cert-manager" ]]; then
-    wget -qO- "$CHART_URL" | tar -xz -C "$BASE_DIR/charts"
-  fi
 
   kubectl get namespace cert-manager-ns || kubectl create namespace cert-manager-ns
-  helm upgrade --install -n cert-manager-ns --set 'installCRDs=true' cert-manager  $BASE_DIR/charts/cert-manager
-  
+  helm upgrade --install -n cert-manager-ns cert-manager  $BASE_DIR/charts/cert-manager --values "$BASE_DIR/values/cert-manager/values.yaml"
+
   # display running pods
   kubectl get pods --sort-by=.metadata.creationTimestamp -n cert-manager-ns
 }
@@ -205,10 +199,10 @@ process_values
 deploy_cert_manager
 
 # deploying with external datastores, useful for prod setup
-#deploy_charts cassandra-external elasticsearch-external minio-external fake-aws demo-smtp rabbitmq databases-ephemeral reaper wire-server webapp account-pages team-settings smallstep-accomp ingress-nginx-controller nginx-ingress-services
+#deploy_charts cassandra-external elasticsearch-external minio-external fake-aws smtp rabbitmq databases-ephemeral reaper wire-server webapp account-pages team-settings smallstep-accomp ingress-nginx-controller nginx-ingress-services
 
 # deploying with ephemeral datastores, useful for all k8s setup withou external datastore requirement
-deploy_charts fake-aws demo-smtp rabbitmq databases-ephemeral reaper wire-server webapp account-pages team-settings smallstep-accomp ingress-nginx-controller nginx-ingress-services
+deploy_charts fake-aws smtp rabbitmq databases-ephemeral reaper wire-server webapp account-pages team-settings smallstep-accomp ingress-nginx-controller nginx-ingress-services
 
 # deploying sft and coturn services
 deploy_calling_services
