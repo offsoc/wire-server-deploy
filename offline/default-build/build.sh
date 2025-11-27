@@ -26,7 +26,7 @@ TASKS_DIR="${SCRIPT_DIR}/../tasks"
 # --------------------------
 
 # pulling the charts based on builds.json, charts to be skipped are passed as arguments HELM_CHART_EXCLUDE_LIST
-"${TASKS_DIR}"/proc_pull_charts.sh OUTPUT_DIR="${OUTPUT_DIR}" HELM_CHART_EXCLUDE_LIST="inbucket,wire-server-enterprise,coturn,postgresql"
+"${TASKS_DIR}"/proc_pull_charts.sh OUTPUT_DIR="${OUTPUT_DIR}" HELM_CHART_EXCLUDE_LIST="inbucket,wire-server-enterprise,postgresql"
 
 # pulling the charts from helm-charts repo, charts to be included are passed as arguments HELM_CHART_INCLUDE_LIST
 # "${TASKS_DIR}"/proc_pull_ext_charts.sh OUTPUT_DIR="${OUTPUT_DIR}" HELM_CHART_INCLUDE_LIST="postgresql-external"
@@ -37,8 +37,11 @@ cp -r "${ROOT_DIR}"/values "${OUTPUT_DIR}"/
 # copy local copy of dashboards from root directory to output directory
 cp -r "${ROOT_DIR}"/dashboards "${OUTPUT_DIR}"/
 
+# removing the values/$chart directories in values directory if not required
+"${TASKS_DIR}"/pre_clean_values_0.sh VALUES_DIR="${OUTPUT_DIR}/values" HELM_VALUES_EXCLUDE_LIST="postgresql" VALUES_TYPE="prod"
+
 # all basic chart pre-processing tasks
-"${TASKS_DIR}"/pre_chart_process_0.sh "${OUTPUT_DIR}"
+"${TASKS_DIR}"/pre_chart_process_0.sh OUTPUT_DIR="${OUTPUT_DIR}"
 
 # all extra pre chart processing tasks for this profile should come here
 # pre_chart_process_1.sh
@@ -50,7 +53,7 @@ cp -r "${ROOT_DIR}"/dashboards "${OUTPUT_DIR}"/
 "${TASKS_DIR}"/process_charts.sh OUTPUT_DIR="${OUTPUT_DIR}" VALUES_TYPE="prod" #IMAGE_EXCLUDE_LIST=""
 
 # all basic chart pre-processing tasks
-"${TASKS_DIR}"/post_chart_process_0.sh "${OUTPUT_DIR}"
+"${TASKS_DIR}"/post_chart_process_0.sh OUTPUT_DIR="${OUTPUT_DIR}"
 
 # all extra post chart processing tasks for this profile should come here
 # post_chart_process_1.sh

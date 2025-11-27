@@ -1,3 +1,18 @@
+# Offline Build Workflow
+#
+# This workflow builds offline deployment artifacts for different profiles:
+#   - default: Production deployment (includes external charts, ansible, terraform)
+#   - demo: Demo/WIAB deployment (includes databases-ephemeral)
+#   - min: Minimal deployment
+#
+# Build Optimization via PR Labels:
+#   - No label: Builds default + demo + min (all profiles)
+#   - 'demo-only': Builds only demo profile
+#   - 'min-only': Builds only min profile
+#   - 'build-all': Explicitly builds all profiles (useful for workflow changes)
+#
+# Push to master/develop: Always builds all profiles regardless of labels
+#
 on:
   push:
     branches: [master, develop]
@@ -14,7 +29,12 @@ jobs:
   # Build default profile and create local assets
   build-default:
     name: Build default profile
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    if: |
+      !contains(github.event.head_commit.message, 'skip ci') &&
+      (github.event_name == 'push' ||
+       contains(github.event.pull_request.labels.*.name, 'build-all') ||
+       (!contains(github.event.pull_request.labels.*.name, 'demo-only') &&
+        !contains(github.event.pull_request.labels.*.name, 'min-only')))
     runs-on:
       group: wire-server-deploy
     outputs:
@@ -43,66 +63,14 @@ jobs:
           GPG_PRIVATE_KEY: '${{ secrets.GPG_PRIVATE_KEY }}'
           DOCKER_LOGIN: '${{ secrets.DOCKER_LOGIN }}'
 
-      # Upload the assets to be shared with other jobs
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: default-build-assets
-          path: offline/default-build/output/assets.tgz
-          retention-days: 1
-
-  # Upload to S3 in parallel with deployment
-  upload-s3:
-    name: Upload default build to S3
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
-    needs: build-default
-    runs-on:
-      group: wire-server-deploy
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: default-build-assets
-          path: offline/default-build/output/
-
       - name: Copy default build assets tarball to S3
         run: |
-          aws s3 cp offline/default-build/output/assets.tgz s3://public.wire.com/artifacts/wire-server-deploy-static-${{ needs.build-default.outputs.upload_name }}.tgz
-          echo "Uploaded to: https://s3-$AWS_REGION.amazonaws.com/public.wire.com/artifacts/wire-server-deploy-static-${{ needs.build-default.outputs.upload_name }}.tgz"
+          aws s3 cp offline/default-build/output/assets.tgz s3://public.wire.com/artifacts/wire-server-deploy-static-${{ steps.upload_name.outputs.UPLOAD_NAME }}.tgz
+          echo "Uploaded to: https://s3-$AWS_REGION.amazonaws.com/public.wire.com/artifacts/wire-server-deploy-static-${{ steps.upload_name.outputs.UPLOAD_NAME }}.tgz"
         env:
           AWS_ACCESS_KEY_ID: '${{ secrets.AWS_ACCESS_KEY_ID }}'
           AWS_SECRET_ACCESS_KEY: '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
           AWS_REGION: "eu-west-1"
-
-  # Deploy to Hetzner in parallel with S3 upload
-  deploy-hetzner:
-    name: Deploy default build to Hetzner
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
-    needs: build-default
-    runs-on:
-      group: wire-server-deploy
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - uses: cachix/install-nix-action@v27
-      - uses: cachix/cachix-action@v15
-        with:
-          name: wire-server
-          signingKey: "${{ secrets.CACHIX_SIGNING_KEY }}"
-
-      - name: Install nix environment
-        run: nix-env -f default.nix -iA env
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: default-build-assets
-          path: offline/default-build/output/
 
       - name: Install terraform
         uses: hashicorp/setup-terraform@v3
@@ -111,14 +79,19 @@ jobs:
           terraform_wrapper: false
 
       - name: Deploy offline environment to hetzner
-        run: ./offline/cd-with-retry.sh
+        run: ./offline/cd.sh
+        env:
+          HCLOUD_TOKEN: '${{ secrets.HCLOUD_TOKEN }}'
+
+      - name: Clean up hetzner environment; just in case
+        if: always()
+        run: (cd terraform/examples/wire-server-deploy-offline-hetzner ; terraform init && terraform destroy -auto-approve)
         env:
           HCLOUD_TOKEN: '${{ secrets.HCLOUD_TOKEN }}'
 
   # Build container in parallel
   build-container:
     name: Build container
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
     needs: build-default
     runs-on:
       group: wire-server-deploy
@@ -144,7 +117,12 @@ jobs:
   # Build demo profile
   build-demo:
     name: Build demo profile
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    if: |
+      !contains(github.event.head_commit.message, 'skip ci') &&
+      (github.event_name == 'push' ||
+       contains(github.event.pull_request.labels.*.name, 'build-all') ||
+       contains(github.event.pull_request.labels.*.name, 'demo-only') ||
+       !contains(github.event.pull_request.labels.*.name, 'min-only'))
     runs-on:
       group: wire-server-deploy
     steps:
@@ -185,7 +163,12 @@ jobs:
   # Build min profile
   build-min:
     name: Build min profile
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    if: |
+      !contains(github.event.head_commit.message, 'skip ci') &&
+      (github.event_name == 'push' ||
+       contains(github.event.pull_request.labels.*.name, 'build-all') ||
+       contains(github.event.pull_request.labels.*.name, 'min-only') ||
+       !contains(github.event.pull_request.labels.*.name, 'demo-only'))
     runs-on:
       group: wire-server-deploy
     steps:
